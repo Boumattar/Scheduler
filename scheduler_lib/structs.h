@@ -1,3 +1,4 @@
+#pragma once
 #include <vector>
 #include <map>
 #include <string>
@@ -11,6 +12,7 @@ struct TimePlan
     int days;
     int lessonsInDay;
 };
+
 
 struct Class
 {
@@ -30,7 +32,7 @@ struct Teacher
     vector<bool> availability;
 };
 
-typedef map<Section*, vector<Teacher*> > TeacherAssignments;
+typedef map<Section*, map<int, Teacher*> > TeacherAssignments;
 struct MaxHoursConstraint
 {
     int subject;

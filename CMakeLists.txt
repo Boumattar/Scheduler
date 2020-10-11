@@ -6,6 +6,7 @@ cmake_minimum_required (VERSION 3.8)
 project ("Scheduler")
 
 # Include sub-projects.
+add_subdirectory("naxos")
 add_subdirectory ("scheduler_lib")
 add_subdirectory ("Scheduler")
 add_subdirectory("test")

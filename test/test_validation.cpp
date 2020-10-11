@@ -46,20 +46,25 @@ class TeacherOverloadTest : public ::testing::Test {
 public:
     TeacherOverloadTest()
     {
-        timePlan = TimePlan{ 5, 5 };
+        timePlan = TimePlan { 5, 5 };
         map<int, int> class1Curr = { { 0, 4 }, { 1, 6 }, { 2, 8 }, { 3, 2 }, { 4, 5 } };
         map<int, int> class2Curr = { { 0, 7 }, { 1, 1 }, { 2, 5 }, { 3, 6 }, { 4, 6 } };
-        class1 = Class{ "class1", class1Curr };
-        class2 = Class{ "class2", class2Curr};
-        section1_1 = Section{ &class1, "section1_2" };
-        section1_2= Section{ &class1, "section1_2" };
-        section2_1= Section{ &class2, "section2_1" };
-        section2_2= Section{ &class2, "section2_2" };
+        class1 = Class { "class1", class1Curr };
+        class2 = Class { "class2", class2Curr };
+        section1_1 = Section { &class1, "section1_2" };
+        section1_2 = Section { &class1, "section1_2" };
+        section2_1 = Section { &class2, "section2_1" };
+        section2_2 = Section { &class2, "section2_2" };
 
         vector<bool> fullTime = vector<bool>(25, true);
 
         auto partTime = fullTime;
-        partTime[9] = false; partTime[14] = false; partTime[17] = false; partTime[18] = false; partTime[21] = false; partTime[24] = false;
+        partTime[9] = false;
+        partTime[14] = false;
+        partTime[17] = false;
+        partTime[18] = false;
+        partTime[21] = false;
+        partTime[24] = false;
         teacher1 = { "teacher1", fullTime };
         teacher2 = { "teacher2", fullTime };
         teacher3 = { "teacher3", fullTime };
@@ -68,10 +73,10 @@ public:
         overloadedTeacher = { "overloadedTeacher", partTime };
 
         teacherAssignments = {
-            {&section1_1, {&teacher1, &teacher1, &teacher2, &teacher2, &teacher1}},
-            {&section1_2, {&teacher3, &teacher3, &teacher4, &overloadedTeacher, &overloadedTeacher}},
-            {&section2_1, {&teacher5, &overloadedTeacher, &teacher1, &overloadedTeacher, &overloadedTeacher}},
-            {&section2_2, {&teacher3, &teacher3, &teacher1, &teacher4, &teacher5}}
+            { &section1_1, { { 0, &teacher1 }, { 1, &teacher1 }, { 2, &teacher2 }, { 3, &teacher2 }, { 4, &teacher1 } } },
+            { &section1_2, { { 0, &teacher3 }, { 1, &teacher3 }, { 2, &teacher4 }, { 3, &overloadedTeacher }, { 4, &overloadedTeacher } } },
+            { &section2_1, { { 0, &teacher5 }, { 1, &overloadedTeacher }, { 2, &teacher1 }, { 3, &overloadedTeacher }, { 4, &overloadedTeacher } } },
+            { &section2_2, { { 0, &teacher3 }, { 1, &teacher3 }, { 2, &teacher1 }, { 3, &teacher4 }, { 4, &teacher5 } } }
         };
     }
     ~TeacherOverloadTest() { }
@@ -94,7 +99,7 @@ public:
 };
 TEST(InputValidationTest, checkTimePlan)
 {
-    Response response = validateInputs(TimePlan { 0, 5 }, 10, vector<Section*>(),
+    Response response = solve(TimePlan { 0, 5 }, 10, vector<Section*>(),
         TeacherAssignments());
 
     EXPECT_EQ(response.success, false);
@@ -102,7 +107,7 @@ TEST(InputValidationTest, checkTimePlan)
     EXPECT_EQ(response.message, "Total number of lessons is invalid: 0");
     EXPECT_EQ(response.result, Result());
 
-    Response response2 = validateInputs(TimePlan { 2, -5 }, 10, vector<Section*>(),
+    Response response2 = solve(TimePlan { 2, -5 }, 10, vector<Section*>(),
         TeacherAssignments());
 
     EXPECT_EQ(response2.success, false);
@@ -113,7 +118,7 @@ TEST(InputValidationTest, checkTimePlan)
 
 TEST_F(InputValidationInvalidCurriculumTest, checkInvalidCurriculum)
 {
-    Response response = validateInputs(
+    Response response = solve(
         timePlan, 10, { &invalidCurriculumSession }, TeacherAssignments());
 
     EXPECT_EQ(response.success, false);
@@ -122,7 +127,7 @@ TEST_F(InputValidationInvalidCurriculumTest, checkInvalidCurriculum)
                                 "curriculum with total number of lessons 24");
     EXPECT_EQ(response.result, Result());
 
-    response = validateInputs(
+    response = solve(
         timePlan, 10, { &emptyCurriculumSession }, TeacherAssignments());
 
     EXPECT_EQ(response.success, false);
@@ -134,7 +139,7 @@ TEST_F(InputValidationInvalidCurriculumTest, checkInvalidCurriculum)
 
 TEST_F(InputValidationInvalidCurriculumTest, checkInvalidSubjects)
 {
-    Response response = validateInputs(
+    Response response = solve(
         timePlan, 10, { &invalidSubjectsSection1 }, TeacherAssignments());
 
     EXPECT_EQ(response.success, false);
@@ -142,7 +147,7 @@ TEST_F(InputValidationInvalidCurriculumTest, checkInvalidSubjects)
     EXPECT_EQ(response.message, "Class invalidSubject1 has one or more invalid subjects");
     EXPECT_EQ(response.result, Result());
 
-    response = validateInputs(
+    response = solve(
         timePlan, 10, { &invalidSubjectsSection2 }, TeacherAssignments());
 
     EXPECT_EQ(response.success, false);
@@ -153,7 +158,7 @@ TEST_F(InputValidationInvalidCurriculumTest, checkInvalidSubjects)
 
 TEST_F(InputValidationInvalidCurriculumTest, checkTooFrequentSubjects)
 {
-    Response response = validateInputs(
+    Response response = solve(
         timePlan, 10, { &tooFrequenctSubjectSection }, TeacherAssignments());
 
     EXPECT_EQ(response.success, false);
@@ -162,10 +167,9 @@ TEST_F(InputValidationInvalidCurriculumTest, checkTooFrequentSubjects)
     EXPECT_EQ(response.result, Result());
 }
 
-
 TEST_F(TeacherOverloadTest, checkIfTeacherIsOverloaded)
 {
-    Response response = validateInputs(
+    Response response = solve(
         timePlan, 10, { &section1_1, &section1_2, &section2_1, &section2_2 }, teacherAssignments);
 
     EXPECT_EQ(response.success, false);
