@@ -154,13 +154,74 @@ public:
     TeacherAssignments teacherAssignments;
 };
 
+static bool testResultValidity(TimePlan tp, TeacherAssignments& assignments, Result result)
+{
+    for (auto& sectionResult : result) {
+        Section* section = sectionResult.first;
+        vector<int> schedule = sectionResult.second;
+
+        map<int, int> subjectToFrequency;
+        for (int day = 0; day < tp.days; day++) {
+            map<int, int> dailyMap;
+            for (int lesson = 0; lesson < tp.lessonsInDay; lesson++) {
+                int lessonIndex = day * tp.lessonsInDay + lesson;
+                int subject = result[section][lessonIndex];
+
+                if (subjectToFrequency.find(subject) == subjectToFrequency.end()) {
+                    subjectToFrequency[subject] = 1;
+                } else {
+                    subjectToFrequency[subject]++;
+                }
+
+                if (dailyMap.find(subject) == dailyMap.end()) {
+                    dailyMap[subject] = 1;
+                } else {
+                    dailyMap[subject]++;
+                }
+                for (auto& subjFreqPair : dailyMap) {
+                    if (subjFreqPair.second > MaxNumberOfSubjectPerDay)
+                        return false;
+                }
+            }
+        }
+        if (subjectToFrequency != section->c->curriculum)
+            return false;
+    }
+
+    map<Teacher*, vector<pair<Section*, int>>> teacherToAssignments;
+
+    for (auto& sectionAssignment : assignments) {
+        Section* section = sectionAssignment.first;
+        for (auto& teacherAssignment : sectionAssignment.second) {
+            Teacher* teacher = teacherAssignment.second;
+            teacherToAssignments[teacher].push_back({ section, teacherAssignment.first });
+        }
+    }
+
+    for (auto& teacherToAssignment : teacherToAssignments) {
+        Teacher* teacher = teacherToAssignment.first;
+        vector<pair<Section*, int>> taughtSessions = teacherToAssignment.second;
+        for (int lesson = 0; lesson < getDaysCount(tp); lesson++) {
+            int numberOfLessons = 0;
+            for (auto taughtPair : taughtSessions) {
+                if (result[taughtPair.first][lesson] == taughtPair.second)
+                    numberOfLessons++;
+            }
+            if (numberOfLessons > 1 || (numberOfLessons == 1 && !teacher->availability[lesson]))
+                return false;
+        }
+    }
+    return true;
+}
+
 TEST_F(GoldenTest, solveGoldenTestCase)
 {
+    auto sections = { &sectionA_1, &sectionA_2, &sectionB_1, &sectionB_2, &sectionC_1, &sectionC_2 };
     Response response = solve(
-        timePlan, 10, { &sectionA_1, &sectionA_2, &sectionB_1, &sectionB_2, &sectionC_1, &sectionC_2 }, teacherAssignments);
+        timePlan, 10, sections, teacherAssignments);
 
     EXPECT_EQ(response.success, true);
     EXPECT_EQ(response.code, ErrorCode::NO_ERROR);
     EXPECT_EQ(response.message, "");
-    //EXPECT_EQ(response.result, Result());
+    EXPECT_EQ(testResultValidity(timePlan, teacherAssignments, response.result), true);
 }

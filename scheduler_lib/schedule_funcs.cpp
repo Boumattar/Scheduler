@@ -19,6 +19,15 @@ static int getTeacherTotalAvailability(Teacher& teacher)
     return count(teacher.availability.begin(), teacher.availability.end(), true);
 }
 
+static set<int> getAvailableSubjects(Section* section)
+{
+    set<int> result;
+    for (auto subject : section->c->curriculum) {
+        result.insert(subject.first);
+    }
+    return result;
+}
+
 Response
 validateInputs(TimePlan timePlan,
     int maxNumberOfSubjects,
@@ -110,94 +119,107 @@ Response solve(TimePlan timePlan, int maxNumberOfSubjects, vector<Section*> sect
     }
 
     Result result;
-    for (auto section : sections) {
-        result[section] = vector<int>(getDaysCount(timePlan), -1);
-    }
 
-    SectionToSubjectsAndAvailability sectionToSubjectAndAvailability;
-    TeacherAvailability teacherAvailability;
+    NsProblemManager pm;
 
-    //Fill map of section to available subjects
+    map<Section*, NsIntVarArray> sectionSchedules;
+    map<Teacher*, vector<NsInt>> teacherAvailability;
+    map<Teacher*, vector<NsIntVarArray>> teacherLoad;
+    map<Section*, vector<NsIntVarArray>> sectionDaySchedules;
+
     for (Section* section : sections) {
-        sectionToSubjectAndAvailability.insert(pair<Section*, vector<pair<int, bool>>>(section, vector<pair<int, bool>>()));
-        for (auto& subjectAndFrequency : section->c->curriculum) {
-            auto newSubjects = vector<pair<int, bool>>(subjectAndFrequency.second, pair<int, bool>(subjectAndFrequency.first, true));
-            sectionToSubjectAndAvailability[section].insert(end(sectionToSubjectAndAvailability[section]), begin(newSubjects), end(newSubjects));
+        auto availableSubjetcs = getAvailableSubjects(section);
+        for (int day = 0; day < timePlan.days; day++) {
+            NsIntVarArray daySchedule;
+            for (int lesson = 0; lesson < timePlan.lessonsInDay; lesson++) {
+                int lessonIndex = day * timePlan.lessonsInDay + lesson;
+                sectionSchedules[section].push_back(NsIntVar(pm, 0, maxNumberOfSubjects - 1));
+
+                //Remove subjects not compatible with section curriculum from domain
+                for (int subject = 0; subject < maxNumberOfSubjects; subject++) {
+                    if (availableSubjetcs.find(subject) == availableSubjetcs.end()) {
+                        sectionSchedules[section][lessonIndex].remove(subject);
+                    }
+                }
+
+                daySchedule.push_back(sectionSchedules[section][lessonIndex] + 0);
+            }
+            sectionDaySchedules[section].push_back(daySchedule);
         }
-        const bool isRightSize = sectionToSubjectAndAvailability[section].size() == getDaysCount(timePlan);
-        assert(isRightSize);
     }
 
-    //Fill map of teacher availability
-    for (auto& assignment : teacherAssignments) {
-        for (auto& teacherSubjectPair : assignment.second) {
-            if (teacherAvailability.find(teacherSubjectPair.second) == teacherAvailability.end())
-                teacherAvailability[teacherSubjectPair.second] = teacherSubjectPair.second->availability;
+    map<Teacher*, vector<pair<Section*, int>>> teacherToAssignments;
+
+    //Fill map
+    for (auto& sectionAssignment : teacherAssignments) {
+        Section* section = sectionAssignment.first;
+        for (auto& teacherAssignment : sectionAssignment.second) {
+            Teacher* teacher = teacherAssignment.second;
+            teacherToAssignments[teacher].push_back({ section, teacherAssignment.first });
         }
     }
 
-    bool solved = backtrack(timePlan, sections, teacherAssignments, sectionToSubjectAndAvailability, teacherAvailability, result, 0);
-
-    if (solved)
-        return Response { true, ErrorCode::NO_ERROR, "", result };
-
-    return Response { false, ErrorCode::NO_SOLUTION, "", result };
-}
-
-bool checkIfSubjectFits(TimePlan timePlan, int subject, Section* section, TeacherAssignments& assignments, TeacherAvailability& teacherSlots, Result& result, int slotInWeek)
-{
-    Teacher* assignedTeacher = assignments[section][subject];
-
-    if (!teacherSlots[assignedTeacher][slotInWeek])
-        return false;
-
-    vector<int>& schedule = result[section];
-    int day = slotInWeek / timePlan.lessonsInDay;
-    int subjectInDayCount = 0;
-    for (int i = day * timePlan.lessonsInDay; i < (day + 1) * timePlan.lessonsInDay; i++) {
-        if (schedule[i] == subject)
-            subjectInDayCount++;
-    }
-    if (subjectInDayCount >= MaxNumberOfSubjectPerDay)
-        return false;
-    return true;
-}
-
-bool backtrack(TimePlan timePlan, vector<Section*> sections, TeacherAssignments& assignments, SectionToSubjectsAndAvailability& subjects, TeacherAvailability& teacherSlots, Result& result, int index)
-{
-
-    if (index < 0)
-        return false;
-
-    if (index >= sections.size() * getDaysCount(timePlan))
-        return true;
-
-    int indexOfSection = index / getDaysCount(timePlan);
-    int indexInWeek = index - indexOfSection * getDaysCount(timePlan);
-
-    Section* section = sections.at(indexOfSection);
-    auto& subjectsAndAvailabilities = subjects[section];
-
-    for (auto& subject : subjectsAndAvailabilities) {
-        if (subject.second) {
-            bool fits = checkIfSubjectFits(timePlan, subject.first, section, assignments, teacherSlots, result, indexInWeek);
-            if (fits) {
-                result[section][indexInWeek] = subject.first;
-                subject.second = false;
-                Teacher* assignedTeacher = assignments.at(section).at(subject.first);
-                teacherSlots[assignedTeacher][indexInWeek] = false;
-
-                if (backtrack(timePlan, sections, assignments, subjects, teacherSlots, result, index + 1))
-                    return true;
-
-                //otherwise backtrack
-                result[section][indexInWeek] = -1;
-                subject.second = true;
-                teacherSlots[assignedTeacher][indexInWeek] = true;
+    for (auto& teacherToAssignment : teacherToAssignments) {
+        Teacher* teacher = teacherToAssignment.first;
+        vector<pair<Section*, int>> taughtSessions = teacherToAssignment.second;
+        for (int day = 0; day < timePlan.days; day++) {
+            NsIntVarArray daySchedule;
+            for (int lesson = 0; lesson < timePlan.lessonsInDay; lesson++) {
+                int lessonIndex = day * timePlan.lessonsInDay + lesson;
+                teacherAvailability[teacher].push_back(teacher->availability[lessonIndex]);
+                NsIntVarArray teacherLoadForSlot;
+                for (auto& session : taughtSessions) {
+                    Section* section = session.first;
+                    int subject = session.second;
+                    teacherLoadForSlot.push_back(sectionSchedules[section][lessonIndex] == (NsInt)subject);
+                }
+                teacherLoad[teacher].push_back(teacherLoadForSlot);
             }
         }
     }
-    return false;
+
+    //Ensure max of MaxNumberOfSubjectPerDay similar sessions per day
+    for (auto& sectionPair : sectionDaySchedules) {
+        for (auto& daySchedule : sectionPair.second) {
+            pm.add(NsAllDiff(daySchedule, MaxNumberOfSubjectPerDay));
+        }
+    }
+
+    for (auto& teacherPair : teacherLoad) {
+        Teacher* teacher = teacherPair.first;
+        for (int lessonIndex = 0; lessonIndex < getDaysCount(timePlan); lessonIndex++) {
+            pm.add(NsSum(teacherPair.second[lessonIndex]) - teacherAvailability[teacher][lessonIndex] == 0);
+        }
+    }
+
+    for (auto& sectionSchedule : sectionSchedules) {
+
+        map<int, int> sectionCurriculum = sectionSchedule.first->c->curriculum;
+        NsDeque<NsInt> subjArr;
+        NsDeque<NsInt> freqArr;
+        int index = 0;
+        for (auto subjPair : sectionCurriculum) {
+            subjArr.push_back(subjPair.first);
+            freqArr.push_back(subjPair.second);
+        }
+
+        pm.add(NsCount(sectionSchedule.second, subjArr, freqArr));
+
+        pm.addGoal(new NsgLabeling(sectionSchedule.second));
+    }
+
+    if (pm.nextSolution() != false) {
+        for (auto& sectionSchedule : sectionSchedules) {
+            Section* section = sectionSchedule.first;
+            for (auto& subject : sectionSchedule.second) {
+                result[section].push_back(subject.value());
+            }
+        }
+
+        return Response { true, ErrorCode::NO_ERROR, "", result };
+    }
+
+    return Response { false, ErrorCode::NO_SOLUTION, "", result };
 }
 
 string
