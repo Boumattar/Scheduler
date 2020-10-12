@@ -1,4 +1,6 @@
+#include "fstream"
 #include "schedule_funcs.h"
+#include "test_main.h"
 #include <memory>
 
 #include "gtest/gtest.h"
@@ -224,4 +226,19 @@ TEST_F(GoldenTest, solveGoldenTestCase)
     EXPECT_EQ(response.code, ErrorCode::NO_ERROR);
     EXPECT_EQ(response.message, "");
     EXPECT_EQ(testResultValidity(timePlan, teacherAssignments, response.result), true);
+}
+
+std::string resource_dir = TEST_RESOURCE_DIR;
+
+TEST(FileTest, solveJsonInput)
+{
+    ifstream inputStream;
+    inputStream.open(resource_dir + "input.json");
+
+    json j;
+    j << inputStream;
+
+    json result = solveJsonRequest(j);
+
+    string answer = result.dump();
 }

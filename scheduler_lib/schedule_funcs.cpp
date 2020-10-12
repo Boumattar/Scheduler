@@ -222,6 +222,91 @@ Response solve(TimePlan timePlan, int maxNumberOfSubjects, vector<Section*> sect
     return Response { false, ErrorCode::NO_SOLUTION, "", result };
 }
 
+json solveJsonRequest(json& input)
+{
+    json result;
+
+    map<string, Class> classes;
+    map<string, Teacher> teachers;
+    map<string, Section> sections;
+    map<string, int> subjects;
+    map<int, string> idToSubjects;
+    TimePlan tp;
+    TeacherAssignments assignments;
+
+    tp.days = input["timeplan"]["days"];
+    tp.lessonsInDay = input["timeplan"]["dayLength"];
+
+    int subjId = 0;
+    for (auto& subject : input["subjects"]) {
+        idToSubjects[subjId] = subject["name"];
+        subjects[subject["name"]] = subjId++;
+    }
+
+    for (auto& c : input["classes"]) {
+        map<int, int> curriculum;
+        for (json::iterator it = c["curriculum"].begin(); it != c["curriculum"].end(); ++it) {
+            curriculum[subjects[it.key()]] = it.value();
+        }
+        Class newClass { c["name"], curriculum };
+        classes[c["name"]] = newClass;
+    }
+
+    for (auto& section : input["sections"]) {
+        Section newSection { &classes[section["class"]], section["name"] };
+        sections[section["name"]] = newSection;
+    }
+
+    for (auto& teacher : input["teachers"]) {
+        vector<bool> availability = vector<bool>(tp.days * tp.lessonsInDay, false);
+        for (auto availableDay : teacher["available"]) {
+            availability[availableDay] = true;
+        }
+        Teacher newTeacher { teacher["name"], availability };
+        teachers[teacher["name"]] = newTeacher;
+    }
+
+    for (auto& sectionAssignments : input["teacherAssignments"]) {
+        Section* section = &sections[sectionAssignments["section"]];
+        map<int, Teacher*> subjToTeacher;
+        for (auto& assignment : sectionAssignments["assignments"]) {
+            Teacher* teacher = &teachers[assignment["teacher"]];
+            int subject = subjects[assignment["subject"]];
+            subjToTeacher[subject] = teacher;
+        }
+        assignments[section] = subjToTeacher;
+    }
+
+    int maxSubject = subjId;
+
+    vector<Section*> sectionsVector;
+    transform(sections.begin(), sections.end(), back_inserter(sectionsVector), [](auto& section) { return &section.second; });
+
+    Response response = solve(tp, maxSubject, sectionsVector, assignments);
+
+    result["success"] = response.success;
+    if (!response.success) {
+        result["error"] = response.message;
+    } else {
+        for (auto& sectionResults : response.result) {
+            Section* section = sectionResults.first;
+            vector<int> schedule = sectionResults.second;
+            json jsonSchedule;
+            jsonSchedule["section"] = section->name;
+            for (int day = 0; day < tp.days; day++) {
+                vector<string> daySchedule;
+                for (int lesson = 0; lesson < tp.lessonsInDay; lesson++) {
+                    int lessonIndex = day * tp.lessonsInDay + lesson;
+                    daySchedule.push_back(idToSubjects[schedule[lessonIndex]]);
+                }
+                jsonSchedule["schedule"].push_back(daySchedule);
+            }
+            result["result"].push_back(jsonSchedule);
+        }
+    }
+    return result;
+}
+
 string
 getMessage()
 {
